@@ -3,7 +3,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, orderBy, limit, onSnapshot, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL , uploadBytesResumable } from 'firebase/storage';
+// import { getStorage, ref, uploadBytes, getDownloadURL , uploadBytesResumable } from 'firebase/storage';
 // Your Firebase configuration
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -22,7 +22,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+// export const storage = getStorage(app);
 
 // Google provider
 export const googleProvider = new GoogleAuthProvider();
@@ -33,6 +33,28 @@ export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
 export const loginWithEmail = (email, password) => signInWithEmailAndPassword(auth, email, password);
 export const registerWithEmail = (email, password) => createUserWithEmailAndPassword(auth, email, password);
 export const logout = () => signOut(auth);
+
+
+// ================== File Upload Constants ==================
+export const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+export const DOC_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "application/zip"
+];
+export const MAX_IMAGE_MB = 5;   // 5MB for images
+export const MAX_FILE_MB = 20;  // 20MB for other files
+
+// Helper function to sanitize file names
+export const sanitizeFileName = (name) => {
+  return name.replace(/[^a-z0-9.\-_]/gi, "_").toLowerCase();
+};
+
+
 
 // User functions
 export const createUserDocument = async (user, additionalData = {}) => {
@@ -160,37 +182,37 @@ export const sendMessage = async (
 
 
 // File upload functions
-export const uploadFile = async (file, path, onProgress = null) => {
-  try {
-    const storageRef = ref(storage, path);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+// export const uploadFile = async (file, path, onProgress = null) => {
+//   try {
+//     const storageRef = ref(storage, path);
+//     const uploadTask = uploadBytesResumable(storageRef, file);
 
-    return new Promise((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          if (onProgress) onProgress(progress);
-        },
-        (error) => {
-          console.error('Upload error:', error);
-          reject(error);
-        },
-        async () => {
-          try {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadURL);
-          } catch (error) {
-            reject(error);
-          }
-        }
-      );
-    });
-  } catch (error) {
-    console.error('Error uploading file:', error);
-    throw error;
-  }
-};
+//     return new Promise((resolve, reject) => {
+//       uploadTask.on(
+//         'state_changed',
+//         (snapshot) => {
+//           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+//           if (onProgress) onProgress(progress);
+//         },
+//         (error) => {
+//           console.error('Upload error:', error);
+//           reject(error);
+//         },
+//         async () => {
+//           try {
+//             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+//             resolve(downloadURL);
+//           } catch (error) {
+//             reject(error);
+//           }
+//         }
+//       );
+//     });
+//   } catch (error) {
+//     console.error('Error uploading file:', error);
+//     throw error;
+//   }
+// };
 
 // export const uploadChatFile = async (chatId, file, onProgress = null) => {
 //   const path = `chat-files/${chatId}/${Date.now()}_${file.name}`;
@@ -288,29 +310,49 @@ export const uploadAvatar = async (userId, file) => {
 // Upload Chat File via ImgBB
 // ⛔️ Remove the ImgBB version. Use Firebase Storage instead.
 export const uploadChatFile = async (chatId, file, senderId) => {
-  if (!chatId || !file || !senderId) throw new Error('chatId, file, senderId required');
+  if (!chatId || !file || !senderId) throw new Error("chatId, file, senderId required");
 
   const isImage = IMAGE_TYPES.includes(file.type);
   const allowed = isImage ? IMAGE_TYPES : [...IMAGE_TYPES, ...DOC_TYPES];
-  if (!allowed.includes(file.type)) throw new Error('Unsupported file type');
+  if (!allowed.includes(file.type)) throw new Error("Unsupported file type");
 
   const max = isImage ? MAX_IMAGE_MB : MAX_FILE_MB;
   if (file.size > max * 1024 * 1024) throw new Error(`File must be <= ${max}MB`);
 
-  const safeName = sanitizeFileName(file.name || (isImage ? 'image' : 'file'));
-  const path = `chat-files/${chatId}/${Date.now()}_${safeName}`;
-  const storageRef = ref(storage, path);
+  const formData = new FormData();
+  formData.append("image", file);
 
-  const snapshot = await uploadBytesResumable(storageRef, file).then(s => s);
-  const downloadURL = await getDownloadURL(snapshot.ref);
+  const res = await fetch(
+    `https://api.imgbb.com/1/upload?key=${import.meta.env.VITE_IMGBB_API_KEY}`,
+    { method: "POST", body: formData }
+  );
 
-  // return just the meta; DO NOT write message here
-  return {
-    url: downloadURL,
+  const data = await res.json();
+  if (!data.success) throw new Error("ImgBB upload failed");
+
+  const fileUrl = data.data.url;
+  const safeName = sanitizeFileName(file.name || (isImage ? "image" : "file"));
+
+  // Save message in Firestore
+  const messageData = {
+    senderId,
+    type: isImage ? "image" : "file",
     fileName: safeName,
     fileSize: file.size,
-    type: isImage ? 'image' : 'file',
+    fileUrl,
+    timestamp: serverTimestamp(),
+    status: "sent",
   };
+
+  await addDoc(collection(db, "chats", chatId, "messages"), messageData);
+
+  const chatRef = doc(db, "chats", chatId);
+  await updateDoc(chatRef, {
+    lastMessage: isImage ? "📷 Image" : safeName,
+    lastMessageTime: serverTimestamp(),
+  });
+
+  return messageData;
 };
 
 
