@@ -167,7 +167,7 @@ export default function MessageInput({
 
 
   return (
-    <div className="border-t border-gray-200 bg-white">
+    <div className="border-t sticky bottom-0 left-0 thisismessageinput border-gray-200 bg-white">
       {/* Reply Preview */}
       {replyTo && (
         <div className="px-4 py-2 bg-blue-50 border-l-4 border-blue-500 flex items-center justify-between">

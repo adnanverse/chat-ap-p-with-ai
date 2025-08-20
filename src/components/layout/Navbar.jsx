@@ -66,7 +66,7 @@ export default function Navbar({
   };
 
   return (
-    <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+    <div className="bg-white border-b sticky top-0 left-0 z-[9] border-gray-200 px-4 py-3 flex items-center justify-between">
       {/* Left Section */}
       <div className="flex items-center space-x-3">
         {/* Back Button (for mobile) */}

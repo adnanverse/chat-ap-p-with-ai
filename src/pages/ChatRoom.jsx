@@ -62,7 +62,7 @@ export default function ChatRoom({ currentUser }) {
 
   // Desktop layout
   return (
-    <div className="h-screen bg-gray-100 flex">
+    <div className=" h-[100vh] relative bg-gray-100 flex">
       {/* Sidebar */}
       <Sidebar
         currentUser={currentUser}
